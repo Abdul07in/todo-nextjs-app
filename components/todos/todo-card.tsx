@@ -21,7 +21,7 @@ import {
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { ShareDialog } from '@/components/shared/share-dialog';
 import { Todo } from '@/lib/supabase';
-import { todoQueries } from '@/lib/queries';
+import { todoQueries, userQueries } from '@/lib/queries';
 import { toast } from 'sonner';
 import {
   Calendar,
@@ -38,19 +38,63 @@ interface TodoCardProps {
   onUpdate: () => void;
 }
 
-const priorityColors = {
-  low: 'bg-blue-100 text-blue-800 border-blue-200',
-  medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  high: 'bg-red-100 text-red-800 border-red-200',
-};
-
-const statusColors = {
-  todo: 'bg-gray-100 text-gray-800 border-gray-200',
-  in_progress: 'bg-orange-100 text-orange-800 border-orange-200',
-  completed: 'bg-green-100 text-green-800 border-green-200',
-};
+import { CreateTodoDialog } from './create-todo-dialog';
+import { useEffect } from 'react';
 
 export function TodoCard({ todo, onUpdate }: TodoCardProps) {
+  const [ownerName, setOwnerName] = useState<string>('');
+  useEffect(() => {
+    async function fetchOwner() {
+      if (todo.owner_id) {
+        const profile = await userQueries.getProfile(todo.owner_id);
+        setOwnerName(profile?.full_name || profile?.username || 'Unknown');
+      }
+    }
+    fetchOwner();
+  }, [todo.owner_id]);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editDefaultValues, setEditDefaultValues] = useState<any>(null);
+  const openEditDialog = () => {
+    setEditDefaultValues({
+      title: todo.title,
+      description: todo.description || '',
+      due_date: todo.due_date ? new Date(todo.due_date) : undefined,
+      priority: todo.priority,
+      status: todo.status,
+    });
+    setShowEditDialog(true);
+  };
+  const handleEdit = async (data: any) => {
+    setIsLoading(true);
+    try {
+      await todoQueries.updateTodo(todo.id, {
+        title: data.title,
+        description: data.description,
+        due_date: data.due_date ? data.due_date.toISOString() : null,
+        priority: data.priority,
+        status: data.status,
+      });
+      toast.success('Todo updated!');
+      setShowEditDialog(false);
+      onUpdate();
+    } catch (error) {
+      toast.error('Failed to update todo');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const priorityColors = {
+    low: 'bg-blue-100 text-blue-800 border-blue-200',
+    medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    high: 'bg-red-100 text-red-800 border-red-200',
+  };
+
+  const statusColors = {
+    todo: 'bg-gray-100 text-gray-800 border-gray-200',
+    in_progress: 'bg-orange-100 text-orange-800 border-orange-200',
+    completed: 'bg-green-100 text-green-800 border-green-200',
+  };
   const [isLoading, setIsLoading] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -114,6 +158,10 @@ export function TodoCard({ todo, onUpdate }: TodoCardProps) {
       <CardHeader className='pb-3'>
         <div className='flex items-start justify-between'>
           <div className='flex items-start space-x-3'>
+            <div className='flex flex-col items-start justify-center mr-2'>
+              <span className='text-xs text-muted-foreground'>Created by</span>
+              <span className='text-xs font-medium'>{ownerName}</span>
+            </div>
             <Checkbox
               checked={todo.status === 'completed'}
               onCheckedChange={handleStatusChange}
@@ -144,7 +192,12 @@ export function TodoCard({ todo, onUpdate }: TodoCardProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align='end'>
-              <DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  openEditDialog();
+                }}
+              >
                 <Edit className='mr-2 h-4 w-4' />
                 Edit
               </DropdownMenuItem>
@@ -162,6 +215,20 @@ export function TodoCard({ todo, onUpdate }: TodoCardProps) {
                 onOpenChange={setShowShareDialog}
                 onShare={handleShare}
               />
+              {showEditDialog && (
+                <CreateTodoDialog
+                  open={showEditDialog}
+                  onOpenChange={setShowEditDialog}
+                  onSuccess={() => {
+                    setShowEditDialog(false);
+                    onUpdate();
+                  }}
+                  initialValues={editDefaultValues}
+                  onSubmit={handleEdit}
+                  isLoading={isLoading}
+                  isEdit
+                />
+              )}
               <ConfirmDialog
                 open={showDeleteDialog}
                 onOpenChange={setShowDeleteDialog}
