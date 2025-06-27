@@ -47,10 +47,19 @@ type TodoForm = z.infer<typeof todoSchema>;
 
 interface CreateTodoDialogProps {
   onSuccess: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  isEdit?: boolean;
+  initialValues?: any;
+  onSubmit?: (data: any) => void;
+  isLoading?: boolean;
 }
 
-export function CreateTodoDialog({ onSuccess }: CreateTodoDialogProps) {
+export function CreateTodoDialog({ onSuccess, open: controlledOpen, onOpenChange, isEdit, initialValues, onSubmit: onEditSubmit, isLoading: editLoading }: CreateTodoDialogProps) {
   const [open, setOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined && onOpenChange !== undefined;
+  const dialogOpen = isControlled ? controlledOpen : open;
+  const setDialogOpen = isControlled ? onOpenChange : setOpen;
   const [isLoading, setIsLoading] = useState(false);
   const { user } = useAuth();
 
@@ -63,16 +72,19 @@ export function CreateTodoDialog({ onSuccess }: CreateTodoDialogProps) {
     formState: { errors },
   } = useForm<TodoForm>({
     resolver: zodResolver(todoSchema),
-    defaultValues: {
-      priority: 'medium',
-    },
+    defaultValues: initialValues || { priority: 'medium' },
+    values: initialValues,
   });
 
   const dueDate = watch('due_date');
 
   const onSubmit = async (data: TodoForm) => {
+    if (isEdit && onEditSubmit) {
+      await onEditSubmit(data);
+      reset();
+      return;
+    }
     if (!user) return;
-
     setIsLoading(true);
     try {
       await todoQueries.createTodo({
@@ -84,9 +96,8 @@ export function CreateTodoDialog({ onSuccess }: CreateTodoDialogProps) {
         owner_id: user.id,
         shared_with: [],
       });
-
       toast.success('Todo created successfully');
-      setOpen(false);
+      setDialogOpen(false);
       reset();
       onSuccess();
     } catch (error) {
@@ -97,18 +108,20 @@ export function CreateTodoDialog({ onSuccess }: CreateTodoDialogProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button className='gap-2'>
-          <Plus className='h-4 w-4' />
-          New Todo
-        </Button>
-      </DialogTrigger>
+    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {!isEdit && (
+        <DialogTrigger asChild>
+          <Button className='gap-2'>
+            <Plus className='h-4 w-4' />
+            New Todo
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className='sm:max-w-[425px]'>
         <DialogHeader>
-          <DialogTitle>Create New Todo</DialogTitle>
+          <DialogTitle>{isEdit ? 'Edit Todo' : 'Create New Todo'}</DialogTitle>
           <DialogDescription>
-            Add a new task to your todo list
+            {isEdit ? 'Update your todo details' : 'Add a new task to your todo list'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className='space-y-4'>
@@ -190,8 +203,8 @@ export function CreateTodoDialog({ onSuccess }: CreateTodoDialogProps) {
             >
               Cancel
             </Button>
-            <Button type='submit' disabled={isLoading}>
-              {isLoading ? 'Creating...' : 'Create Todo'}
+            <Button type='submit' disabled={isEdit ? editLoading : isLoading}>
+              {isEdit ? (editLoading ? 'Saving...' : 'Save') : (isLoading ? 'Creating...' : 'Create Todo')}
             </Button>
           </div>
         </form>

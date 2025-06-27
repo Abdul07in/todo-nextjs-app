@@ -20,6 +20,9 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { ShareDialog } from '@/components/shared/share-dialog';
 import { Note } from '@/lib/supabase';
 import { noteQueries } from '@/lib/queries';
+import { Dialog } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { MoreHorizontal, Trash, Edit, Share, FileText } from 'lucide-react';
 
@@ -32,6 +35,16 @@ export function NoteCard({ note, onUpdate }: NoteCardProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+
+  const openEditDialog = () => {
+    setEditTitle(note.title);
+    setEditContent(note.content || '');
+    setShowEditDialog(true);
+  };
+
   const handleShare = async (userIds: string[]) => {
     setIsLoading(true);
     try {
@@ -56,6 +69,24 @@ export function NoteCard({ note, onUpdate }: NoteCardProps) {
     } finally {
       setIsLoading(false);
       setShowDeleteDialog(false);
+    }
+  };
+
+  const handleEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      await noteQueries.updateNote(note.id, {
+        title: editTitle,
+        content: editContent,
+      });
+      toast.success('Note updated!');
+      setShowEditDialog(false);
+      onUpdate();
+    } catch (error) {
+      toast.error('Failed to update note');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -88,7 +119,12 @@ export function NoteCard({ note, onUpdate }: NoteCardProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align='end'>
-              <DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  openEditDialog();
+                }}
+              >
                 <Edit className='mr-2 h-4 w-4' />
                 Edit
               </DropdownMenuItem>
@@ -106,6 +142,49 @@ export function NoteCard({ note, onUpdate }: NoteCardProps) {
                 onOpenChange={setShowShareDialog}
                 onShare={handleShare}
               />
+              <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+                <form
+                  onSubmit={handleEdit}
+                  className='p-6 flex flex-col gap-4 min-w-[320px]'
+                >
+                  <h2 className='text-lg font-semibold'>Edit Note</h2>
+                  <div>
+                    <label className='block text-sm font-medium mb-1'>
+                      Title
+                    </label>
+                    <Input
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      required
+                      disabled={isLoading}
+                    />
+                  </div>
+                  <div>
+                    <label className='block text-sm font-medium mb-1'>
+                      Content
+                    </label>
+                    <Textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      rows={6}
+                      disabled={isLoading}
+                    />
+                  </div>
+                  <div className='flex justify-end gap-2 mt-4'>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      onClick={() => setShowEditDialog(false)}
+                      disabled={isLoading}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type='submit' disabled={isLoading}>
+                      {isLoading ? 'Saving...' : 'Save'}
+                    </Button>
+                  </div>
+                </form>
+              </Dialog>
               <ConfirmDialog
                 open={showDeleteDialog}
                 onOpenChange={setShowDeleteDialog}
